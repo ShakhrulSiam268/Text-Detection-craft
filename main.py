@@ -41,7 +41,7 @@ parser.add_argument('--low_text', default=0.4, type=float, help='text low-bound 
 parser.add_argument('--link_threshold', default=0.4, type=float, help='link confidence threshold')
 parser.add_argument('--cuda', default=False, type=str2bool, help='Use cuda for inference')
 parser.add_argument('--canvas_size', default=2480, type=int, help='image size for inference')
-parser.add_argument('--mag_ratio', default=1.5, type=float, help='image magnification ratio')
+parser.add_argument('--mag_ratio', default=1.0, type=float, help='image magnification ratio')
 parser.add_argument('--poly', default=False, action='store_true', help='enable polygon type')
 parser.add_argument('--show_time', default=False, action='store_true', help='show processing time')
 parser.add_argument('--test_folder', default='/data/', type=str, help='folder path to input images')
@@ -62,6 +62,7 @@ if not os.path.isdir(result_folder):
 def test_net(net, image, text_threshold, link_threshold, low_text, cuda, poly, refine_net=None):
     img_resized, target_ratio, size_heatmap = imgproc.resize_aspect_ratio(image, args.canvas_size, interpolation=cv2.INTER_LINEAR, mag_ratio=args.mag_ratio)
     ratio_h = ratio_w = 1 / target_ratio
+    print('65 == ',target_ratio, size_heatmap)
 
     x = imgproc.normalizeMeanVariance(img_resized)
     x = torch.from_numpy(x).permute(2, 0, 1)    # [h, w, c] to [c, h, w]
@@ -72,16 +73,13 @@ def test_net(net, image, text_threshold, link_threshold, low_text, cuda, poly, r
     with torch.no_grad():
         y, feature = net(x)
 
-
     score_text = y[0,:,:,0].cpu().data.numpy()
     score_link = y[0,:,:,1].cpu().data.numpy()
-
 
     if refine_net is not None:
         with torch.no_grad():
             y_refiner = refine_net(y, feature)
         score_link = y_refiner[0,:,:,0].cpu().data.numpy()
-
 
     render_img = score_text.copy()
     ret_score_text = imgproc.cvt2HeatmapImg(render_img)
@@ -89,10 +87,8 @@ def test_net(net, image, text_threshold, link_threshold, low_text, cuda, poly, r
     return ret_score_text
 
 
-
 if __name__ == '__main__':
-    net = CRAFT()     # initialize
-
+    net = CRAFT()
     print('Loading weights from checkpoint (' + args.trained_model + ')')
     if args.cuda:
         net.load_state_dict(copyStateDict(torch.load(args.trained_model)))
@@ -123,8 +119,7 @@ if __name__ == '__main__':
 
     t = time.time()
 
-    image_path = './test_images/ACI Pure Atta.jpg'
-    # k = 0
+    image_path = './test_images/ACI Pure Brown Atta.png'
     image = imgproc.loadImage(image_path)
 
     score_text = test_net(net, image, args.text_threshold, args.link_threshold, args.low_text, args.cuda, args.poly, refine_net)
@@ -136,7 +131,7 @@ if __name__ == '__main__':
 
     blend_image = cv2.addWeighted(image, 0.5, score_text, 0.8, 0.0)
     blend_image = np.hstack((image, blend_image))
-    # cv2.imwrite(mask_file, blend_image)
+    cv2.imwrite(mask_file, blend_image)
     print("elapsed time : {}s".format(time.time() - t))
     cv2.imshow('output', blend_image)
     cv2.waitKey(0)
